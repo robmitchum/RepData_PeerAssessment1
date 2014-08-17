@@ -1,20 +1,102 @@
 # Reproducible Research: Peer Assessment 1
 
+This document fulfills the Peer Assessment 1 assignment for the Reproducible Research course on Coursera. The code and figures investigate activity tracker data taken from from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
 
 ## Loading and preprocessing the data
 
-
+The following code unzips the dataset and loads it into R.
+```{r}
+unzip("./activity.zip")
+data <- read.csv("./activity.csv")
+```
 
 ## What is mean total number of steps taken per day?
 
+First, here is a histogram of the total steps by day.
 
+```{r, results="hide"}
+library(ggplot2)
+totalSteps <- aggregate(data$steps, by = list(data$date), sum)
+qplot(Group.1, x, data = totalSteps, geom = "histogram")
+```
+
+Calling summary on totalSteps then gives you the mean, median, and other info:
+```{r}
+summary(totalSteps)
+```
+
+The mean is 10,766 steps, the median is 10,765.
 
 ## What is the average daily activity pattern?
 
+First, we create a matrix that finds the average steps at each time interval across days. Then we plot it as a time series.
 
+```{r, results="hide"}
+dailyActivity <- as.matrix(tapply(data$steps, data$interval, mean, na.rm = TRUE))
+plot(dailyActivity, type = "l")
+```
+
+The interval with the peak number of average steps can be found with the following code:
+
+```{r}
+peak <- which.max(dailyActivity)
+data$interval[peak]
+```
+
+In this dataset, the peak average steps (206.1698) occurs at the interval 835.
 
 ## Imputing missing values
 
+The total number of NAs in the dataset can be found using the summary function:
 
+```{r}
+summary(data)
+```
+
+There are 2304 NAs in this dataset.
+
+I used [this method](http://www.mail-archive.com/r-help@r-project.org/msg58289.html) for imputing missing values, which replaces NAs with the average steps across all days for that particular interval. With this method, I created a new dataset called 'newData'
+
+```{r}
+library(plyr)
+impute.mean <- function(x) {
+  replace(x, is.na(x), mean(x, na.rm = TRUE))
+}
+newData <- ddply(data, ~ interval, transform, steps = impute.mean(steps))
+```
+
+I then repeated the code from the start of this assignment and created a new histogram and summary for total steps per day.
+
+```{r, results="hide"}
+library(ggplot2)
+totalSteps2 <- aggregate(newData$steps, by = list(newData$date), sum)
+qplot(Group.1, x, data = totalSteps2, geom = "histogram")
+summary(totalSteps2)
+```
+
+The mean (10,766) and median (10,766) number of steps are almost unchanged from the data with NAs included; the median increased by one step.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+First, I added a "weekday or weekend" factor to the dataset:
+
+```{r}
+newData$date <- as.Date(as.character(newData$date), format="%Y-%m-%d")
+newData[,4] <- weekdays(newData$date)
+newData[,5] <- ifelse(newData$V4 %in% c("Monday","Tuesday","Wednesday","Thursday","Friday"), 'weekday', 'weekend')
+newData$V5 <- as.factor(newData$V5)
+```
+
+Then, I plotted the average step time series for weekdays vs. weekends.
+
+```{r, results="hide"}
+weekdays <- subset(newData, newData$V5 == "weekday")
+weekends <- subset(newData, newData$V5 == "weekend")
+weekdayActivity <- as.matrix(tapply(weekdays$steps, weekdays$interval, mean))
+weekendActivity <- as.matrix(tapply(weekends$steps, weekends$interval, mean))
+par(mfrow = c(2,1), mar = c(2,2,1,1))
+plot(weekdayActivity, type = "l", main = "Weekdays")
+plot(weekendActivity, type = "l", main = "Weekends")
+```
+
+From eyeballing the data, it looks like the subject sleeps in on weekends, but is more active throughout the day, as compared to weekdays where an early burst of activity (a morning workout or commute?) is followed by low activity during work hours. 
